@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
@@ -21,6 +22,7 @@ namespace CameraProject_6610301004
         private Mat _frame = new Mat(); // เก็บเฟรมจากกล้อง
         private bool IsConnect = true; // สถานะการเชื่อมต่อกล้อง
         private bool isCapturing = true; // สถานะการบันทึกหรือหยุดบันทึก
+        private Timer snapshotTimer;
 
         // ตัวตรวจจับใบหน้าด้วย Haar Cascade
         CascadeClassifier _cascadeClassifier = new CascadeClassifier(@"E:\CameraProject_6610301004\haarcascade_frontalface_default.xml");
@@ -91,13 +93,49 @@ namespace CameraProject_6610301004
             InitializeComponent(); // โหลดส่วนประกอบของฟอร์ม
             buttonStsrt.Enabled = false; // ปิดปุ่ม Start ไว้จนกว่าจะเชื่อมต่อกล้อง
             timerClock.Enabled = true;   // เปิดใช้งานนาฬิกา
+
+            snapshotTimer = new Timer();
+            snapshotTimer.Interval = 3000; // ตั้งเวลาเป็น 3 วินาที
+            snapshotTimer.Tick += snapshotTimer_Tick;
         }
 
         // ฟังก์ชันโหลดฟอร์ม
+        #region FormMain_Load
         private void FormMain_Load(object sender, EventArgs e)
         {
-            // ฟังก์ชันเปล่าสำหรับการกำหนดคำสั่งเพิ่มเติมตอนโหลดฟอร์ม
+            try
+            {
+                // กำหนดค่าการตั้งเวลา
+                UpDownChoosetime.Minimum = 1; // นาทีต่ำสุด
+                UpDownChoosetime.Maximum = 10; // นาทีสูงสุด
+                UpDownChoosetime.Value = 1;   // ค่าเริ่มต้น
+                UpDownChoosetime.Increment = 1; // เพิ่มทีละ 1 นาที
+
+                UpDownChoosetime.ValueChanged += UpDownChoosetime_ValueChanged;
+
+                // สร้างตัวจับเวลา snapshotTimer ถ้ายังไม่มีการสร้าง
+                if (snapshotTimer == null)
+                {
+                    snapshotTimer = new Timer();
+                    snapshotTimer.Interval = (int)UpDownChoosetime.Value * 60 * 1000; // แปลงเป็นมิลลิวินาที
+                    snapshotTimer.Tick += snapshotTimer_Tick;
+                }
+
+                // สร้าง VideoCapture ถ้ายังไม่มีการสร้าง
+                if (_capture == null)
+                {
+                    _capture = new VideoCapture();
+                    _capture.ImageGrabbed += ProcessFrame;
+                    _frame = new Mat();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"เกิดข้อผิดพลาดใน FormMain_Load: {ex.Message}", "ข้อผิดพลาด", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
+
+        #endregion
 
         // ฟังก์ชันเปลี่ยนข้อความใน TextBox
         private void textBox1_TextChanged(object sender, EventArgs e)
@@ -266,7 +304,163 @@ namespace CameraProject_6610301004
 
         }
 
+
+        #region imageBox2grey
         private void imageBox2_Click(object sender, EventArgs e)
+        {
+            if (isCapturing)
+            {
+                snapshotTimer.Stop(); // หยุดจับภาพ
+                isCapturing = false;
+                //MessageBox.Show("หยุดการจับภาพ", "สถานะ", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                int selectedMinutes = (int)UpDownChoosetime.Value;
+                snapshotTimer.Interval = selectedMinutes * 60 * 1000; // กำหนดเวลาในมิลลิวินาที
+                snapshotTimer.Start(); // เริ่มจับภาพ
+                isCapturing = true;
+                //MessageBox.Show($"เริ่มจับภาพทุก ๆ {selectedMinutes} นาที", "สถานะ", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+        #endregion
+
+        #region buttonBrowse
+        private void buttonBrowse_Click(object sender, EventArgs e)
+        {
+            using (FolderBrowserDialog folderDialog = new FolderBrowserDialog())
+            {
+                // ตั้งค่าต่างๆ ของ FolderBrowserDialog
+                folderDialog.Description = "กรุณาเลือกโฟลเดอร์";
+                folderDialog.ShowNewFolderButton = true; // อนุญาตให้สร้างโฟลเดอร์ใหม่
+                folderDialog.RootFolder = Environment.SpecialFolder.MyComputer; // กำหนดโฟลเดอร์เริ่มต้น
+
+                // แสดงหน้าต่างเลือกโฟลเดอร์
+                if (folderDialog.ShowDialog() == DialogResult.OK)
+                {
+                    // แสดงเส้นทางที่เลือกใน MessageBox หรือ TextBox
+                    string selectedPath = folderDialog.SelectedPath;
+                    textBoxImageFolder.Text = selectedPath;
+                }
+            }
+        }
+        #endregion
+
+        #region CheckBoxSnpshot
+        private void checkBoxSnpshot_CheckedChanged(object sender, EventArgs e)
+        {
+            if (checkBoxSnpshot.Checked)
+            {
+                checkBoxRecognizer.Enabled = false; // ล็อก checkBoxRecognizer
+                snapshotTimer.Start(); // เริ่มจับเวลา
+            }
+            else
+            {
+                checkBoxRecognizer.Enabled = true; // ปลดล็อก checkBoxRecognizer
+                snapshotTimer.Stop(); // หยุดจับเวลา
+            }
+
+        }
+        #endregion
+
+        #region UpDoownChoosetim
+        private void UpDownChoosetime_ValueChanged(object sender, EventArgs e)
+        {
+            int selectedMinutes = (int)UpDownChoosetime.Value;
+
+
+            //int milliseconds = selectedMinutes * 60 * 1000; // แปลงนาทีเป็นมิลลิวินาที
+            //snapshotTimer.Interval = milliseconds;
+
+        }
+        #endregion
+
+        #region CheckBoxRecognizer
+        private void checkBoxRecognizer_CheckedChanged(object sender, EventArgs e)
+        {
+            if (checkBoxRecognizer.Checked)
+            {
+                checkBoxSnpshot.Enabled = false; // ล็อก checkBoxSnpshot
+
+            }
+            else
+            {
+                checkBoxSnpshot.Enabled = true; // ปลดล็อก checkBoxSnpshot
+
+            }
+
+        }
+        #endregion
+
+        #region SnapshotTimer
+        private void snapshotTimer_Tick(object sender, EventArgs e)
+        {
+            // ตรวจสอบว่ากล้องเปิดใช้งานอยู่หรือไม่
+            if (_capture == null)
+            {
+                MessageBox.Show("กล้องยังไม่ถูกเปิดใช้งาน!", "ข้อผิดพลาด", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                snapshotTimer.Stop();
+                return;
+            }
+
+            string folderPath = textBoxImageFolder.Text;
+
+            if (string.IsNullOrEmpty(folderPath) || !System.IO.Directory.Exists(folderPath))
+            {
+                MessageBox.Show("กรุณาเลือกโฟลเดอร์ที่ถูกต้องสำหรับการบันทึกภาพ", "ข้อผิดพลาด", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                snapshotTimer.Stop();
+                checkBoxSnpshot.Checked = false;
+                return;
+            }
+
+            // สร้างชื่อไฟล์แบบไดนามิก
+            string fileName = $"snapshot_{DateTime.Now:yyyyMMdd_HHmmss}.png";
+            string filePath = System.IO.Path.Combine(folderPath, fileName);
+
+            try
+            {
+                // ตรวจสอบว่า QueryFrame คืนค่าที่ถูกต้องหรือไม่
+                using (var imageFrame = _capture.QueryFrame()?.ToImage<Bgr, Byte>())
+                {
+                    if (imageFrame == null)
+                    {
+                        MessageBox.Show("ไม่สามารถจับภาพจากกล้องได้!", "ข้อผิดพลาด", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+
+                    var grayFrame = imageFrame.Convert<Gray, byte>();
+                    var faces = _cascadeClassifier.DetectMultiScale(grayFrame, 1.1, 10);
+
+                    if (faces.Length > 0)
+                    {
+                        int interval = (int)UpDownChoosetime.Value * 1000;
+                        snapshotTimer.Interval = interval;
+
+                        Rectangle face_roi = new Rectangle(faces[0].X, faces[0].Y, faces[0].Width, faces[0].Height);
+                        grayFrame.ROI = face_roi;
+                        var faceImage = grayFrame.Copy();
+
+                        // บันทึกภาพใบหน้า
+                        faceImage.Save(filePath);
+                        textBoxShowim.AppendText($"📷 Snapshot saved to: {filePath}{Environment.NewLine}");
+                        textBoxShowim.AppendText($"⏳ Timer Interval: {snapshotTimer.Interval} ms{Environment.NewLine}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error saving snapshot: {ex.Message}", "ข้อผิดพลาด", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        #endregion
+
+        private void statusLabelClock_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void groupBox1_Enter(object sender, EventArgs e)
         {
 
         }
