@@ -30,31 +30,23 @@ namespace CameraProject_6610301004
         // ฟังก์ชันประมวลผลเฟรมที่ได้จากกล้อง
         private void ProcessFrame(object sender, EventArgs e)
         {
-            // ถ้ากล้องไม่พร้อม ไม่ทำอะไร
             if (_capture == null || _capture.Ptr == IntPtr.Zero) return;
 
-            // ดึงเฟรมจากกล้อง
             _capture.Retrieve(_frame);
 
-            // ถ้าภาพไม่ว่างเปล่า
             if (!_frame.IsEmpty)
             {
-                // แปลงภาพให้เป็นภาพสี
                 var image = _frame.ToImage<Bgr, byte>();
-
-                // แปลงภาพสีให้เป็นภาพขาวดำ
                 var grayImage = image.Convert<Gray, byte>();
 
                 // ค้นหาใบหน้าในภาพขาวดำ
                 var faces = _cascadeClassifier.DetectMultiScale(grayImage, 1.1, 10);
 
-                // วาดกรอบรอบใบหน้าที่เจอ
                 foreach (var face in faces)
                 {
                     image.Draw(face, new Bgr(Color.White), 3);
                 }
 
-                // แสดงภาพในกล่องภาพหลัก
                 imageBox1.Image = image;
 
                 // ถ้าเจอใบหน้า ให้ตัดใบหน้าและแสดงในกล่องเล็ก
@@ -335,7 +327,6 @@ namespace CameraProject_6610301004
                 folderDialog.ShowNewFolderButton = true; // อนุญาตให้สร้างโฟลเดอร์ใหม่
                 folderDialog.RootFolder = Environment.SpecialFolder.MyComputer; // กำหนดโฟลเดอร์เริ่มต้น
 
-                // แสดงหน้าต่างเลือกโฟลเดอร์
                 if (folderDialog.ShowDialog() == DialogResult.OK)
                 {
                     // แสดงเส้นทางที่เลือกใน MessageBox หรือ TextBox
@@ -395,7 +386,6 @@ namespace CameraProject_6610301004
         #region SnapshotTimer
         private void snapshotTimer_Tick(object sender, EventArgs e)
         {
-            // ตรวจสอบว่ากล้องเปิดใช้งานอยู่หรือไม่
             if (_capture == null)
             {
                 MessageBox.Show("กล้องยังไม่ถูกเปิดใช้งาน!", "ข้อผิดพลาด", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -409,17 +399,14 @@ namespace CameraProject_6610301004
             {
                 MessageBox.Show("กรุณาเลือกโฟลเดอร์ที่ถูกต้องสำหรับการบันทึกภาพ", "ข้อผิดพลาด", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 snapshotTimer.Stop();
-                checkBoxSnpshot.Checked = false;
                 return;
             }
 
-            // สร้างชื่อไฟล์แบบไดนามิก
             string fileName = $"snapshot_{DateTime.Now:yyyyMMdd_HHmmss}.png";
             string filePath = System.IO.Path.Combine(folderPath, fileName);
 
             try
             {
-                // ตรวจสอบว่า QueryFrame คืนค่าที่ถูกต้องหรือไม่
                 using (var imageFrame = _capture.QueryFrame()?.ToImage<Bgr, Byte>())
                 {
                     if (imageFrame == null)
@@ -440,7 +427,6 @@ namespace CameraProject_6610301004
                         grayFrame.ROI = face_roi;
                         var faceImage = grayFrame.Copy();
 
-                        // บันทึกภาพใบหน้า
                         faceImage.Save(filePath);
                         textBoxShowim.AppendText($"📷 Snapshot saved to: {filePath}{Environment.NewLine}");
                         textBoxShowim.AppendText($"⏳ Timer Interval: {snapshotTimer.Interval} ms{Environment.NewLine}");
@@ -452,7 +438,6 @@ namespace CameraProject_6610301004
                 MessageBox.Show($"Error saving snapshot: {ex.Message}", "ข้อผิดพลาด", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-
         #endregion
 
         private void statusLabelClock_Click(object sender, EventArgs e)
